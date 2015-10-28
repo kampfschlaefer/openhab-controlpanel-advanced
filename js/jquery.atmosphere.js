@@ -1668,8 +1668,8 @@ jQuery.atmosphere = function() {
 /*
  * jQuery stringifyJSON
  * http://github.com/flowersinthesand/jquery-stringifyJSON
- * 
- * Copyright 2011, Donghwan Kim 
+ *
+ * Copyright 2011, Donghwan Kim
  * Licensed under the Apache License, Version 2.0
  * http://www.apache.org/licenses/LICENSE-2.0
  */

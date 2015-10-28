@@ -4,13 +4,13 @@ var secondsSinceLoad = 0;
 function Start()
 {
 	BuildWidgets();
-	
+
 	CheckStates();
-	
+
 	GetWeather();
-	
+
 	CheckTrashDay();
-	
+
 	StartTime();
 }
 
@@ -19,11 +19,11 @@ function StartTime() {
 
 	$("div.clock").html(today.getHours() + ":" + ToDoubleDigits(today.getMinutes()));
 	$("div.date").html(today.toDateString());
-	
+
 	if (today.getHours() == reloadHour && today.getMinutes() == 0 && secondsSinceLoad > 600) {	// The extra checks besides reloadHour are to make sure we don't reload every second when we hit reloadHour
 		window.location.reload(true);
 	}
-	
+
 	secondsSinceLoad++;
 
 	setTimeout(function(){ StartTime() }, 1000);
@@ -35,11 +35,11 @@ function BuildWidgets()
 {
 	$("widget").each(function() {
 		var widget = $(this);
-		
+
 		Log("[BuildWidgets] " + widget.data("title"), 2);
-		
+
 		var icon = widget.data("icon") || "lightbulb-o";
-		
+
 		switch (widget.data("type")) {
 			case "switch":
 				widget.html("<span class=\"icon fa-" + icon + "\"></span><h3>" + widget.data("title") + "</h3>");
@@ -60,34 +60,43 @@ function CheckStates()
 		try
 		{
 			var widget = $(this);
-			
+
 			// Skip widgets in history mode - logic is in GetHistory
 			var widgetmode = widget.data("mode") || "main";
 			if (widgetmode === "history") {
 				return;
 			}
-			
+
 			// Skip trash widgets - OpenHAB has nothing to do with those
 			if (widget.data("type") === "trash") {
 				return;
 			}
-			
+
 			// Send a simple GET request to OpenHAB to get the item's CURRENT state
 			$.ajax({
-				type: "GET",
-				url: "http://" + openhabURL + widget.data("item") + "/state"
+				method: "GET",
+				url: "http://" + openhabURL + widget.data("item") + "/state",
+				//dataType: 'json'
+				//username: "user",
+				//password: "password",
+				/*headers: {
+					"Authorization": "Basic user:password"
+				},*/
+				/*xhrFields: {
+					withCredentials: true
+				}*/
 			})
 			.done(function(data) {
 				Log("[CheckStates] Initial state of " + widget.data("item") + ": " + data, 3);
 				DisplayItemState(widget, data);
-			}).fail( function(jqXHR, data) { 
+			}).fail( function(jqXHR, data) {
 				Log("Error getting state: " + data, 1);
 			});
-			
+
 			// Now open a socket to be alerted of FUTURE state updates
 			Log('[socket] Opening socket...', 3)
-			
-			var request = { 
+
+			var request = {
 				url: "ws://" + openhabURL + widget.data("item"),
 				maxRequest : 256,
 				timeout: 59000,
@@ -95,9 +104,10 @@ function CheckStates()
 				executeCallbackBeforeReconnect : false,
 				transport : 'websocket' ,
 				fallbackTransport: 'long-polling',
+				accepts: "application/json",
 				headers: { 'Accept': 'application/json' }
 			};
-			
+
 			request.onOpen = function(response) {
 				Log('[socket] Socket opened (' + response.transport + ')', 2);
 			};
@@ -111,19 +121,20 @@ function CheckStates()
 			};
 
 			request.onMessage = function (response) {
+				Log('[socket] data arrived: ' + response.responseBody);
 				if (response.status == 200) {
-					// response.responseBody looks like this: 
+					// response.responseBody looks like this:
 					// { "type": "SwitchItem", "name": "ItemName", "state": "ON", "link": "http://192.168.1.80:8080/rest/items/ItemName" }
 					var message = $.parseJSON(response.responseBody);
 					DisplayItemState(widget, message.state);
 				}
 			}
-			
+
 			socket.subscribe(request);
 		}
 		catch (exception) {
 			Log('[socket] Error:' + exception, 1);
-		}	
+		}
 	});	// end each
 }
 
@@ -164,8 +175,8 @@ function CheckTrashDay()
 	// Look for a widget defined as type "trash"
 	var trashWidget = $("widget[data-type='trash']");
 	if (!trashWidget.length) return;	// no trash widget found
-	
-	// Get the days defined as trash and recycle days 
+
+	// Get the days defined as trash and recycle days
 	// These variables will have value NaN if the data attribute is not found, which is fine
 	var trashDay = parseInt(trashWidget.data("trashday"));
 	var recycleDay = parseInt(trashWidget.data("recycleday"));
@@ -186,7 +197,7 @@ function CheckTrashDay()
 			trashWidget.hide();
 			break;
 	}
-	
+
 	// Check again at 4 AM (forever, every day)
 	var millisTo4AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 4, 0, 0, 0) - now;
 	if (millisTo4AM < 0) {
@@ -211,7 +222,7 @@ function GetHistory(widget)
 			logdata += "<div class=\"logrow\">" + data[i].timestamp + ": <b>" + data[i].value + "</b></div>";
 		});
 		widget.html("<span class=\"sensor\">" + logdata + "</span>");
-	}).fail( function(jqXHR, data) { 
+	}).fail( function(jqXHR, data) {
 		Log("Error getting state: " + data, 1);
 	});
 }
@@ -227,7 +238,7 @@ function GetWeather()
 function GetWeatherConditions()
 {
 	Log("Updating weather conditions", 2);
-	
+
 	// Send a request to the weather service for this location
 	$.ajax({
 		type: "GET",
@@ -239,20 +250,20 @@ function GetWeatherConditions()
 		// The weather service sends back a lot of data, but we'll only use some
 		$("#observation_icon").attr("src", "weather/" + data.current_observation.icon + ".png");
 		$("#observation_weather").html(ParseWeatherConditions(data.current_observation.weather));
-		$("#observation_temperature").html(data.current_observation.temperature_string);
-		$("#observation_feelslike").html("feels like: " + data.current_observation.feelslike_string);
+		$("#observation_temperature").html(data.current_observation.temp_c + "°C");
+		$("#observation_feelslike").html("feels like: " + data.current_observation.feelslike_c + "°C");
 		$("#observation_time").html(data.current_observation.observation_time);
-	}).fail( function(jqXHR, data) { 
+	}).fail( function(jqXHR, data) {
 		Log("Error getting weather: " + data, 1);
 	});
-	
+
 	setTimeout(GetWeatherConditions, weatherFrequency);
 }
 
 function GetWeatherForecast()
 {
 	Log("Updating weather forecast", 2);
-	
+
 	// Send a request to the weather service for this location
 	$.ajax({
 		type: "GET",
@@ -261,22 +272,22 @@ function GetWeatherForecast()
 	})
 	.done(function(data) {
 		Log(data, 4);
-		
+
 		// The weather service sends back a lot of data, but we'll only use some
 		$("#forecast_title", "#weather_today").html(data.forecast.simpleforecast.forecastday[0].date.weekday);
 		$("#forecast_icon", "#weather_today").attr("src", "weather/" + data.forecast.simpleforecast.forecastday[0].icon + ".png");
 		$("#forecast_conditions", "#weather_today").html(ParseWeatherConditions(data.forecast.simpleforecast.forecastday[0].conditions));
-		$("#forecast_high", "#weather_today").html(data.forecast.simpleforecast.forecastday[0].high.fahrenheit + "F (" + data.forecast.simpleforecast.forecastday[0].high.celsius + "C)");
-		$("#forecast_low", "#weather_today").html(data.forecast.simpleforecast.forecastday[0].low.fahrenheit + "F (" + data.forecast.simpleforecast.forecastday[0].low.celsius + "C)");
-		
+		$("#forecast_high", "#weather_today").html(data.forecast.simpleforecast.forecastday[0].high.celsius + "°C");
+		$("#forecast_low", "#weather_today").html(data.forecast.simpleforecast.forecastday[0].low.celsius + "°C");
+
 		$("#forecast_title", "#weather_tomorrow").html(data.forecast.simpleforecast.forecastday[1].date.weekday);
 		$("#forecast_icon", "#weather_tomorrow").attr("src", "weather/" + data.forecast.simpleforecast.forecastday[1].icon + ".png");
 		$("#forecast_conditions", "#weather_tomorrow").html(ParseWeatherConditions(data.forecast.simpleforecast.forecastday[1].conditions));
-		$("#forecast_high", "#weather_tomorrow").html(data.forecast.simpleforecast.forecastday[1].high.fahrenheit + "F (" + data.forecast.simpleforecast.forecastday[1].high.celsius + "C)");
-		$("#forecast_low", "#weather_tomorrow").html(data.forecast.simpleforecast.forecastday[1].low.fahrenheit + "F (" + data.forecast.simpleforecast.forecastday[1].low.celsius + "C)");
-		
+		$("#forecast_high", "#weather_tomorrow").html(data.forecast.simpleforecast.forecastday[1].high.celsius + "°C");
+		$("#forecast_low", "#weather_tomorrow").html(data.forecast.simpleforecast.forecastday[1].low.celsius + "°C");
+
 		$("#forecast_time").html("Forecast Time: " + data.forecast.txt_forecast.date);
-		
+
 		// After 5 PM: show tomorrow's forecast. Before 5 PM: show today's.
 		var today = new Date();
 		if (today.getHours() >= 17){
@@ -286,10 +297,10 @@ function GetWeatherForecast()
 			$("#weather_today").show();
 			$("#weather_tomorrow").hide();
 		}
-	}).fail( function(jqXHR, data) { 
+	}).fail( function(jqXHR, data) {
 		Log("Error getting weather: " + data, 1);
 	});
-	
+
 	setTimeout(GetWeatherForecast, forecastFrequency);
 }
 
@@ -318,26 +329,27 @@ $(document).on("mousedown", "div.weather_forecast", function(){
 // Capture clicks: Widgets
 $(document).on("mousedown", "widget", function(){
 	var widget = $(this);
-	
+
 	Log("Clicked widget: " + widget.data("title") + " of type '" + widget.data("type") + "'", 2);
-	
+
 	if (widget.data("type") === "switch") {
 		// Clicked on a switch: send command to OpenHAB
 		$.ajax({
 			type: "POST",
 			url: "http://" + openhabURL + widget.data("item"),
-			data: widget.data("onclick"), 
+			data: widget.data("onclick"),
+			accepts: "text/plain",
 			headers: { "Content-Type": "text/plain" }
 		})
 		.done(function(data) {
 			Log("Command sent", 2);
-		}).fail( function(jqXHR, data) { 
+		}).fail( function(jqXHR, data) {
 			Log("Error on tap: " + data, 1);
 		});
 	} else if (widget.data("history")) {
 		// Clicked on a widget that has history data: toggle between main mode and history mode
 		var widgetmode = widget.data("mode") || "main";
-		
+
 		if (widgetmode === "main") {
 			// Switch to history mode
 			widget.data("mode", "history");
@@ -363,7 +375,7 @@ $(document).on("mousedown", "widget", function(){
 
 // Add a zero in front of numbers < 10
 function ToDoubleDigits(i) {
-	if (i < 10) {i = "0" + i};  
+	if (i < 10) {i = "0" + i};
 	return i;
 }
 
